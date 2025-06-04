@@ -1,0 +1,162 @@
+/* Basic Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif; /* Refined font choice */
+    line-height: 1.6;
+    margin: 0;
+    background-color: #f0f2f5; /* Slightly adjusted background color */
+    color: #333;
+    display: flex; /* Added for sticky footer */
+    flex-direction: column; /* Added for sticky footer */
+    min-height: 100vh; /* Added for sticky footer */
+}
+
+.container { /* Added a container for centering content */
+    width: 80%;
+    margin: auto;
+    overflow: hidden;
+    padding: 0 20px;
+}
+
+header {
+    background: #2c3e50; /* Changed header background color */
+    color: #ecf0f1; /* Changed header text color */
+    padding: 1.5rem 0; /* Increased padding */
+    text-align: center;
+    border-bottom: #1abc9c 3px solid; /* Added a border accent */
+}
+
+header h1 {
+    margin: 0;
+    font-size: 2.5rem; /* Increased font size */
+}
+
+nav {
+    background: #34495e; /* Changed nav background color */
+    color: #ecf0f1;
+    padding: 1rem 0; /* Increased padding for height */
+    text-align: center;
+    min-height: 50px; /* Ensure nav has some height */
+}
+
+nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0; /* Reset margin for ul inside nav */
+}
+
+nav ul li {
+    display: inline;
+    margin-right: 25px; /* Increased spacing */
+}
+
+nav a {
+    color: #ecf0f1; /* Changed nav link color */
+    text-decoration: none;
+    font-size: 1.1rem; /* Increased font size */
+    padding: 5px 10px; /* Added padding to links */
+    border-radius: 5px; /* Added border-radius for a button-like feel */
+    transition: background-color 0.3s ease; /* Smooth transition for hover */
+}
+
+nav a:hover, nav a.active {
+    background-color: #1abc9c; /* Added hover effect and active class styling */
+    color: #fff;
+}
+
+main {
+    flex-grow: 1; /* Added for sticky footer */
+    padding: 2rem 0; /* Increased padding */
+    background-color: #fff; /* Added background to differentiate main content */
+    border-radius: 5px; /* Added subtle rounding */
+    margin-top: 10px; /* Added margin to separate from nav/header */
+    margin-bottom: 20px; /* Added margin to separate from footer */
+}
+
+/* Styles for h2 in index.html */
+main h2 {
+    color: #2c3e50; /* Matched header color */
+    font-size: 2rem; /* Increased font size */
+    text-align: center;
+    margin-bottom: 1.5rem; /* Added spacing below heading */
+    border-bottom: 2px solid #eee; /* Subtle separator */
+    padding-bottom: 0.5rem;
+}
+
+/* Article link list styling in index.html */
+main ul {
+    list-style: none;
+    padding: 0;
+    display: flex; /* Using flex for better alignment if needed */
+    flex-direction: column;
+    align-items: center; /* Center items if flex is used */
+}
+
+main ul li {
+    margin-bottom: 1rem; /* Spacing between list items */
+    background-color: #f9f9f9; /* Slight background for each item */
+    padding: 1rem;
+    border-radius: 5px;
+    width: 80%; /* Control width of list items */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow */
+}
+
+main ul li a {
+    color: #3498db; /* Changed link color */
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.2rem;
+    transition: color 0.3s ease;
+}
+
+main ul li a:hover {
+    color: #2980b9; /* Darker shade on hover */
+    text-decoration: underline;
+}
+
+
+/* Article Page Specific Styles */
+article {
+    padding: 1rem;
+    background-color: #fff; /* Ensure article content area is white */
+}
+
+article h1 {
+    color: #2c3e50; /* Consistent with header/main h2 */
+    font-size: 2.2rem; /* Slightly larger for article title */
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+    text-align: left; /* Align article title to left */
+}
+
+article p {
+    line-height: 1.7; /* Improved readability */
+    margin-bottom: 1.2rem; /* Spacing between paragraphs */
+    font-size: 1.05rem; /* Slightly larger paragraph text */
+    color: #555; /* Softer text color */
+}
+
+article a { /* Styling for links within articles, like "Back to Home" */
+    color: #3498db;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+article a:hover {
+    color: #2980b9;
+    text-decoration: underline;
+}
+
+footer {
+    background: #2c3e50; /* Matched header background */
+    color: #ecf0f1; /* Matched header text color */
+    text-align: center;
+    padding: 1.5rem 0; /* Increased padding */
+    /* Removed position relative, bottom 0, width 100% for sticky footer via flexbox */
+}

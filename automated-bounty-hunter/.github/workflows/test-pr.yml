@@ -1,0 +1,81 @@
+# GitHub Actions CI Workflow for the Automated Bounty Hunter project
+# This workflow tests the codebase of the tool itself.
+
+name: Build and Test Project
+
+# Controls when the workflow will run
+on:
+  push:
+    branches: [ "main", "master" ] # Trigger on push to main or master
+  pull_request:
+    branches: [ "main", "master" ] # Trigger on PRs targeting main or master
+
+jobs:
+  build_and_test:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Step 1: Check out the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4 # Using a newer version of checkout
+
+      # Step 2: Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v4 # Using a newer version of setup-python
+        with:
+          python-version: '3.10' # Specify Python version
+          cache: 'pip' # Cache pip dependencies
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m venv .venv_ci # Create a virtual environment
+          source .venv_ci/bin/activate # Activate the virtual environment
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # Install dev dependencies for linting and testing
+          pip install flake8 pytest
+
+      # Step 4: Lint with flake8
+      # Flake8 combines PyFlakes, pycodestyle, and McCabe.
+      # E9: Syntax errors or undefined names
+      # F63: Invalid format string
+      # F7: Errors from PyFlakes (e.g. undefined names)
+      # F82: Undefined names (often from imports)
+      # --count: Show count of errors and warnings
+      # --show-source: Show source code for errors
+      # --statistics: Show error statistics
+      # --exit-zero: Don't fail the build for style issues, but show them. Critical errors (E9,F*) will still fail.
+      # --max-complexity: McCabe complexity checker
+      # --max-line-length: Max line length
+      - name: Lint with flake8
+        run: |
+          source .venv_ci/bin/activate
+          # First pass for critical errors (syntax, undefined names) - this will fail the build if any are found
+          echo "Running flake8 for critical errors (E9, F*)..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+          # Second pass for style checks and complexity - does not fail the build (--exit-zero)
+          # This allows us to see style warnings without blocking PRs for them initially.
+          echo "Running flake8 for style and complexity (W, E (except E9), C90)..."
+          flake8 . --count --exit-zero --max-complexity=12 --max-line-length=120 --statistics --ignore=E501,W503 # Ignoring line length and line break before binary operator for now
+
+      # Step 5: Run tests with pytest
+      # This step will discover and run any tests defined in the project.
+      # For now, it might not find many tests, but it sets up the framework.
+      # Pytest will automatically discover files named test_*.py or *_test.py
+      # and test methods or functions named test_*.
+      - name: Test with pytest
+        run: |
+          source .venv_ci/bin/activate
+          pytest
+          # Add options like -v for verbose output or specific paths if needed, e.g., pytest tests/
+          # If your __main__ blocks are testable, pytest might pick them up if they follow test_ conventions
+          # or you can configure pytest to find them.
+
+      # Optional: Deactivate virtual environment if needed by subsequent steps, though typically not necessary as job runners are ephemeral.
+      # - name: Deactivate venv
+      #   run: |
+      #     deactivate

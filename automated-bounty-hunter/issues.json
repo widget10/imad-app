@@ -1,0 +1,29 @@
+[
+  {
+    "id": "gitcoin_123",
+    "title": "Fix off-by-one error in pagination",
+    "github_repo_url": "https://github.com/test-owner/test-repo",
+    "issue_number": 42,
+    "bounty_amount": 50,
+    "platform_source": "Gitcoin",
+    "description_override": "The pagination logic in `src/utils/pagination.js` has an off-by-one error when calculating the total number of pages. This causes the last page to sometimes be inaccessible or show incorrect data. Please fix the calculation and ensure all edge cases are handled."
+  },
+  {
+    "id": "manual_001",
+    "title": "Update README with new setup instructions",
+    "github_repo_url": "https://github.com/another-owner/another-project",
+    "issue_number": 5,
+    "bounty_amount": 0,
+    "platform_source": "Manual",
+    "relevant_files": ["README.md", "CONTRIBUTING.md"]
+  },
+  {
+    "id": "bountysource_abc",
+    "title": "Optimize database query for user profiles",
+    "github_repo_url": "https://github.com/test-owner/test-repo",
+    "issue_number": 78,
+    "bounty_amount": 150,
+    "platform_source": "Bountysource",
+    "required_skills": ["Python", "Django", "PostgreSQL"]
+  }
+]

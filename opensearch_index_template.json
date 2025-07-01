@@ -1,0 +1,47 @@
+{
+  "index_patterns": ["siem-identity-logs-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "index.lifecycle.name": "siem_logs_policy",
+      "index.lifecycle.rollover_alias": "siem-identity-logs"
+    },
+    "mappings": {
+      "properties": {
+        "tenant_id": {
+          "type": "keyword"
+        },
+        "timestamp": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "user_id": {
+          "type": "keyword"
+        },
+        "event_type": {
+          "type": "keyword"
+        },
+        "event_status": {
+          "type": "keyword"
+        },
+        "source_ip": {
+          "type": "ip"
+        },
+        "application_id": {
+          "type": "keyword"
+        },
+        "details": {
+          "type": "object",
+          "enabled": false
+        }
+      }
+    }
+  },
+  "priority": 200,
+  "composed_of": [],
+  "version": 1,
+  "_meta": {
+    "description": "Index template for SIEM identity logs"
+  }
+}

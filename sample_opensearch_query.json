@@ -1,0 +1,80 @@
+{
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "range": {
+            "timestamp": {
+              "gte": "now-30d/d",
+              "lte": "now/d"
+            }
+          }
+        },
+        {
+          "term": {
+            "event_status": "failure"
+          }
+        },
+        {
+          "bool": {
+            "should": [
+              { "term": { "event_type": "login" } },
+              { "term": { "event_type": "auth_failure" } }
+            ],
+            "minimum_should_match": 1
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "total_login_failures_by_tenant": {
+      "terms": {
+        "field": "tenant_id",
+        "size": 10,
+        "order": {
+          "_count": "desc"
+        }
+      }
+    },
+    "top_users_with_login_failures": {
+      "terms": {
+        "field": "user_id",
+        "size": 5,
+        "order": {
+          "_count": "desc"
+        }
+      }
+    },
+    "login_failure_trends_over_time": {
+      "date_histogram": {
+        "field": "timestamp",
+        "calendar_interval": "day",
+        "min_doc_count": 0,
+        "extended_bounds": {
+            "min": "now-30d/d",
+            "max": "now/d"
+        }
+      }
+    },
+    "source_ips_with_most_login_failures": {
+      "terms": {
+        "field": "source_ip",
+        "size": 10,
+        "order": {
+          "_count": "desc"
+        }
+      }
+    },
+    "failures_by_app_id": {
+      "terms": {
+        "field": "application_id",
+        "size": 10,
+        "order": {
+          "_count": "desc"
+        }
+      }
+    }
+  },
+  "size": 0
+}

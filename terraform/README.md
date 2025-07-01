@@ -73,9 +73,45 @@ export TF_VAR_project_name="siem-poc"
 
 Terraform will automatically use environment variables prefixed with `TF_VAR_` to populate its input variables.
 
-## Terraform Commands
+## Using the `run.sh` Script (Recommended)
 
-Ensure you are in the `terraform` directory for all commands.
+A helper script `run.sh` is provided in this directory to streamline the deployment and destruction process.
+
+**Ensure you are in the `terraform` directory before running the script.**
+
+Make sure the script is executable:
+```bash
+chmod +x run.sh
+```
+
+### To Deploy or Update Infrastructure:
+
+```bash
+./run.sh
+```
+The script will:
+1.  Check if `.env` exists and source it.
+2.  Verify AWS CLI and credentials.
+3.  Run `terraform init`.
+4.  Run `terraform validate`.
+5.  Run `terraform plan -out=tfplan`.
+6.  Prompt you to review the `tfplan` file and confirm before applying.
+7.  If confirmed, run `terraform apply tfplan`.
+8.  Remind you of post-deployment manual steps.
+
+### To Destroy Infrastructure:
+
+```bash
+./run.sh destroy
+```
+The script will:
+1.  Prompt for confirmation before running `terraform destroy`.
+
+Using `run.sh` is recommended as it includes pre-flight checks and standardizes the workflow.
+
+## Manual Terraform Commands (Alternative)
+
+If you prefer to run Terraform commands manually, ensure you are in the `terraform` directory for all commands. Remember to load your environment variables from `.env` first.
 
 ### 1. Initialize Terraform
 

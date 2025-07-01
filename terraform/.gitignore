@@ -1,0 +1,31 @@
+# Local .terraform directories
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# .tfvars files
+*.tfvars
+*.tfvars.json
+
+# Environment variables file
+.env
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .zip files, unless explicitly unignored after this rule
+# (we will zip lambda code, but it's better to generate it on the fly)
+*.zip
+
+# Override secrets from .tfvars files in case of secrets accidentally committed for example in a manual run
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Include CLI configuration files neither for AWS CLI nor for Terraform CLI
+.aws/
+terraform.rc
+.terraformrc
+```

@@ -1,21 +1,33 @@
 # Terraform Configuration for SIEM Lake PoC on AWS
 
-This directory contains Terraform configurations to deploy the infrastructure for the SIEM Lake Proof of Concept on AWS. This setup will provision:
+This directory contains Terraform configurations to deploy the infrastructure for the SIEM Lake Proof of Concept on AWS, **using Amazon MSK as the streaming platform.** This setup will provision:
 
-*   An AWS OpenSearch Service domain.
-*   An AWS Kinesis Data Stream for ingesting raw logs.
-*   An AWS Lambda function for transforming logs.
-*   An AWS Kinesis Data Firehose delivery stream to batch, transform, and deliver logs to OpenSearch.
-*   An AWS S3 bucket for Kinesis Data Firehose backups.
-*   Necessary IAM Roles and Policies for the services to interact.
+*   A Virtual Private Cloud (VPC) with public and private subnets, NAT Gateways, and route tables.
+*   An Amazon MSK (Managed Streaming for Apache Kafka) cluster.
+*   An AWS Lambda function (`msk_consumer_lambda`) to consume messages from an MSK topic, transform them, and ingest them into OpenSearch.
+*   An AWS OpenSearch Service domain (deployed within the VPC).
+*   An AWS S3 bucket (potentially for MSK broker logs or general use, previously for Firehose backups).
+*   Necessary IAM Roles and Policies and Security Groups for the services to interact securely.
 
 ## Prerequisites
 
 1.  **Terraform CLI**: Install Terraform (version >= 1.0).
-2.  **AWS CLI**: Install and configure the AWS CLI with credentials that have permissions to create the resources defined in this configuration. Ensure your AWS CLI profile is correctly set up or that your environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (if applicable), `AWS_REGION`) are configured.
-3.  **Python 3.x**: For running the `sample_log_generator.py` script (located in the parent directory) to test the pipeline.
-4.  **jq (optional)**: Useful for parsing JSON output from AWS CLI commands.
-5.  **Log Transformation Code**: The `transformation_lambda.py` script is expected to be in the `lambda_code/` subdirectory within this Terraform project. This is handled by the plan.
+2.  **AWS CLI**: Install and configure the AWS CLI with credentials that have permissions to create the resources defined in this configuration.
+3.  **Python Libraries for Lambda Packaging (Manual Step for User)**:
+    The `msk_consumer_lambda.py` requires `opensearch-py` and `boto3`. The current Terraform setup for the Lambda (`lambda_msk_consumer.tf`) uses `archive_file` to zip only the `msk_consumer_lambda.py` script itself from the `lambda_code` directory. **For this Lambda to work correctly when deployed, you must manually create a deployment package (ZIP file) that includes these libraries and the script, then update `data.archive_file.msk_consumer_lambda_zip.source_dir` or `output_path` in `lambda_msk_consumer.tf` accordingly, or use a Lambda Layer.**
+    *   Example of creating a package:
+        ```bash
+        # In terraform/lambda_code/
+        pip install opensearch-py boto3 -t ./package
+        cp msk_consumer_lambda.py ./package/
+        cd package
+        zip -r ../msk_consumer_lambda_payload.zip .
+        cd ..
+        # Then ensure terraform/lambda_msk_consumer.tf points to this zip.
+        # (e.g., by setting output_path of archive_file to this pre-built zip, or removing archive_file and using filename directly)
+        ```
+    This manual packaging step is a simplification for this PoC's Terraform. Production setups would use more robust build and packaging automation.
+4.  **Python 3.x and `kafka-python`**: For running the `sample_log_generator.py` script (located in the parent directory) to send logs to MSK. Install `kafka-python` via `pip install kafka-python`.
 
 ## Setup Instructions
 
@@ -42,14 +54,18 @@ Terraform variables are used to customize the deployment. Some sensitive variabl
     *   `TF_VAR_aws_region`: Set your desired AWS region.
     *   `TF_VAR_project_name`: A prefix for your resources.
     *   `TF_VAR_opensearch_domain_name`: Desired OpenSearch domain name.
-    *   `TF_VAR_opensearch_master_user_name` and `TF_VAR_opensearch_master_user_password`: If you want Terraform to create a master user for OpenSearch Fine-Grained Access Control (FGAC). **Ensure the password is strong.** If you leave these commented out or `null`, a master user will not be created by these Terraform scripts (you might need to configure it manually or it might be auto-created by AWS with temporary credentials you retrieve from the console).
-    *   Other `TF_VAR_*` variables can be adjusted as needed.
+    *   `TF_VAR_opensearch_master_user_name` and `TF_VAR_opensearch_master_user_password`: For OpenSearch FGAC master user.
+    *   `TF_VAR_vpc_cidr`, `TF_VAR_public_subnet_cidrs`, `TF_VAR_private_subnet_cidrs`: For VPC networking.
+    *   `TF_VAR_msk_broker_instance_type`, `TF_VAR_msk_kafka_version`, `TF_VAR_msk_number_of_broker_nodes`, `TF_VAR_msk_topic_name`: For MSK cluster configuration.
+    *   Other `TF_VAR_*` variables as defined in `variables.tf`.
 
     **Important:** The `.env` file is listed in `.gitignore` and should **never** be committed to version control if it contains sensitive information.
 
-### 3. Load Environment Variables
+### 3. Prepare Lambda Deployment Package (Manual Step)
 
-For Terraform to pick up the variables defined in your `.env` file (prefixed with `TF_VAR_`), you need to load them into your shell session before running Terraform commands.
+As mentioned in Prerequisites, ensure the `msk_consumer_lambda_payload.zip` (or the directory referenced by `data.archive_file.msk_consumer_lambda_zip`) in `lambda_msk_consumer.tf` contains `msk_consumer_lambda.py` **and its dependencies (`opensearch-py`, `boto3`)**. If you created a zip manually, you might need to adjust `lambda_msk_consumer.tf` to use `filename = "lambda_code/msk_consumer_lambda_payload.zip"` directly on the `aws_lambda_function` resource instead of using the `archive_file` data source.
+
+### 4. Load Environment Variables
 
 **Option A: Using `source` (for Bash/Zsh)**
 ```bash
@@ -150,9 +166,9 @@ After a successful apply, Terraform will print the defined outputs. You can also
 terraform output
 ```
 Key outputs include:
-*   `opensearch_domain_endpoint`: The endpoint for your OpenSearch domain.
-*   `opensearch_domain_kibana_endpoint`: The URL for OpenSearch Dashboards.
-*   `kinesis_stream_name`: The name of your Kinesis Data Stream.
+*   `opensearch_domain_endpoint` and `opensearch_domain_kibana_endpoint`.
+*   `msk_cluster_arn`, `msk_bootstrap_brokers_tls`, `msk_topic_name_configured`.
+*   `lambda_msk_consumer_function_name`.
 
 ### 5. Destroy Infrastructure
 
@@ -220,26 +236,24 @@ Follow the instructions in `dashboard_configuration.md` (located in the parent d
 
 1.  **Generate and Send Logs:**
     *   Navigate to the parent directory where `sample_log_generator.py` is located.
-    *   You'll need to send the output of this script to the Kinesis Data Stream. The easiest way is to modify `sample_log_generator.py` to use AWS SDK (Boto3) to put records into the stream.
-    *   Alternatively, use the AWS CLI. First, get your Kinesis stream name from Terraform output:
+    *   Retrieve MSK bootstrap servers and topic name from Terraform outputs:
         ```bash
-        STREAM_NAME=$(terraform output -raw kinesis_stream_name)
+        BOOTSTRAP_SERVERS=$(terraform output -raw msk_bootstrap_brokers_tls)
+        TOPIC_NAME=$(terraform output -raw msk_topic_name_configured)
         ```
-    *   Then, run the generator and pipe one log to AWS CLI (example for one log):
+    *   Run the `sample_log_generator.py` script, providing these details:
         ```bash
-        # Example: Generate one Okta log and send it
-        python ../sample_log_generator.py --provider okta --count 1 | jq -c . | xargs -I {} aws kinesis put-record --stream-name $STREAM_NAME --partition-key "test-pk" --data {}
+        python ../sample_log_generator.py --bootstrap-servers "$BOOTSTRAP_SERVERS" --topic "$TOPIC_NAME" --num-logs 20
         ```
-        (Note: `sample_log_generator.py` would need modification to output single JSON objects per line and accept arguments for provider/count for this one-liner to work directly. The current generator prints multiple logs and descriptive text).
-
-        A more robust way is to modify `sample_log_generator.py` as shown in the main PoC README to directly send logs to Kinesis using Boto3. Ensure the `provider` and `log` structure is maintained for the Lambda transformer.
+        This requires `kafka-python` to be installed in your Python environment. If not, the script will print logs to the console.
 
 2.  **Verify Data:**
-    *   Check CloudWatch Logs for the Lambda function and Kinesis Data Firehose for any errors.
-    *   Query data in OpenSearch Dashboards (Dev Tools or Discover tab) to see if transformed logs are arriving in the `siem-identity-logs-*` indices.
+    *   Check CloudWatch Logs for the `msk_consumer_lambda` function for processing details or errors.
+    *   Check MSK CloudWatch metrics if needed.
+    *   Query data in OpenSearch Dashboards (Dev Tools or Discover tab) to see if transformed logs are arriving in the `siem-identity-logs-*` indices (or your configured index prefix).
     *   Check your dashboard visualizations.
 
-## File Structure Overview
+## File Structure Overview (MSK Version)
 
 ```
 terraform/
@@ -247,18 +261,20 @@ terraform/
 ├── .gitignore              # Files to ignore for Git
 ├── main.tf                 # Main configuration, locals
 ├── providers.tf            # Provider configurations
-├── variables.tf            # Input variables
-├── outputs.tf              # Output values
-├── iam.tf                  # IAM roles and policies
-├── s3.tf                   # S3 bucket for Firehose backups
-├── kinesis_stream.tf       # Kinesis Data Stream
-├── lambda.tf               # Lambda function and related resources
-├── lambda_code/            # Directory for Lambda source code
-│   └── transformation_lambda.py # Copied Lambda transformation script
-├── opensearch.tf           # OpenSearch domain
-├── firehose.tf             # Kinesis Data Firehose delivery stream
-└── README.md               # This file
+├── variables.tf            # Input variables (updated for MSK)
+├── outputs.tf              # Output values (updated for MSK)
+├── network.tf              # VPC, Subnets, Security Groups, NAT, IGW, Route Tables
+├── iam.tf                  # IAM roles and policies (updated for MSK consumer Lambda)
+├── s3.tf                   # S3 bucket (may be repurposed or for MSK logs)
+├── msk.tf                  # MSK Cluster definition
+├── lambda_msk_consumer.tf  # MSK Consumer Lambda function and event source mapping
+├── lambda_code/
+│   └── msk_consumer_lambda.py # Python code for MSK consumer
+│   └── transformation_lambda.py # Original transformation logic (may be removed if fully integrated)
+├── opensearch.tf           # OpenSearch domain (updated for VPC and new Lambda access)
+└── README.md               # This file (updated for MSK)
 ```
+(Note: `kinesis_stream.tf` and `firehose.tf` would be deleted in this MSK version.)
 
 ## Cleanup
 

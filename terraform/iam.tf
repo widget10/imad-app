@@ -1,6 +1,6 @@
-# IAM Role for Lambda Transformation Function
-resource "aws_iam_role" "lambda_transformer_role" {
-  name               = local.lambda_role_name
+# --- IAM Role and Policies for Lambda MSK Consumer ---
+resource "aws_iam_role" "lambda_msk_consumer_role" {
+  name               = local.lambda_msk_consumer_role_name # New local variable needed in main.tf
   assume_role_policy = jsonencode({
     Version   = "2012-10-17",
     Statement = [
@@ -16,11 +16,23 @@ resource "aws_iam_role" "lambda_transformer_role" {
   tags = local.common_tags
 }
 
-# Policy for Lambda to write to CloudWatch Logs
-resource "aws_iam_policy" "lambda_logging_policy" {
-  name        = "${var.project_name}-lambda-logging-policy"
-  description = "Allows Lambda functions to write logs to CloudWatch."
-  policy      = jsonencode({
+# Managed policy for MSK access (provides necessary Kafka client permissions)
+resource "aws_iam_role_policy_attachment" "lambda_msk_execution_role_attachment" {
+  role       = aws_iam_role.lambda_msk_consumer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaMSKExecutionRole"
+}
+
+# Managed policy for VPC access (to connect to MSK and OpenSearch in VPC)
+resource "aws_iam_role_policy_attachment" "lambda_vpc_access_attachment" {
+  role       = aws_iam_role.lambda_msk_consumer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Inline policy for CloudWatch Logs and OpenSearch Write Access
+resource "aws_iam_policy" "lambda_msk_consumer_custom_policy" {
+  name        = "${var.project_name}-lambda-msk-consumer-custom-policy"
+  description = "Custom policy for MSK Consumer Lambda: CloudWatch Logs and OpenSearch write."
+  policy = jsonencode({
     Version   = "2012-10-17",
     Statement = [
       {
@@ -30,21 +42,35 @@ resource "aws_iam_policy" "lambda_logging_policy" {
           "logs:PutLogEvents"
         ],
         Effect   = "Allow",
-        Resource = "arn:aws:logs:*:*:*" # Restrict if possible, e.g., to specific log group prefix
+        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.lambda_msk_consumer_function_name}:*"
+      },
+      {
+        # Allow Lambda to write to the OpenSearch domain
+        Effect   = "Allow",
+        Action   = [
+          "es:ESHttpPost",
+          "es:ESHttpPut"
+          # Add "es:ESHttpHead" if your client library uses it for health checks
+        ],
+        # Ensure this ARN matches your OpenSearch domain ARN and allows access to indices
+        Resource = "${aws_opensearch_domain.siem_domain.arn}/*"
       }
     ]
   })
   tags = local.common_tags
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_logging_attachment" {
-  role       = aws_iam_role.lambda_transformer_role.name
-  policy_arn = aws_iam_policy.lambda_logging_policy.arn
+resource "aws_iam_role_policy_attachment" "lambda_msk_consumer_custom_attachment" {
+  role       = aws_iam_role.lambda_msk_consumer_role.name
+  policy_arn = aws_iam_policy.lambda_msk_consumer_custom_policy.arn
 }
 
+
+# --- (Commented Out/Removed) Kinesis Firehose Related IAM Resources ---
+/*
 # IAM Role for Kinesis Firehose Delivery Stream
 resource "aws_iam_role" "firehose_delivery_role" {
-  name               = local.firehose_role_name
+  name               = local.firehose_role_name # Ensure local.firehose_role_name is defined or remove
   assume_role_policy = jsonencode({
     Version   = "2012-10-17",
     Statement = [
@@ -67,65 +93,7 @@ resource "aws_iam_policy" "firehose_delivery_policy" {
   policy      = jsonencode({
     Version   = "2012-10-17",
     Statement = [
-      {
-        # Allow Firehose to read from the Kinesis Data Stream
-        Effect   = "Allow",
-        Action   = [
-          "kinesis:DescribeStream",
-          "kinesis:GetShardIterator",
-          "kinesis:GetRecords",
-          "kinesis:ListShards"
-        ],
-        Resource = aws_kinesis_stream.raw_logs_stream.arn
-      },
-      {
-        # Allow Firehose to invoke the Lambda transformation function
-        Effect   = "Allow",
-        Action   = "lambda:InvokeFunction",
-        Resource = aws_lambda_function.transformer_lambda.arn
-      },
-      {
-        # Allow Firehose to write to the OpenSearch domain
-        Effect   = "Allow",
-        Action   = [
-          "es:ESHttpPost", // For older ES versions, OpenSearch uses "es:*" or specific "aoss:*"
-          "es:ESHttpPut",
-          "es:DescribeDomain", // General OpenSearch actions might use "es:DescribeDomain" or "aoss:DescribeDomain"
-          "es:DescribeDomains",
-          "es:DescribeDomainConfig",
-           // For OpenSearch Serverless, permissions are different (e.g. aoss:BatchGetCollection)
-           // For managed OpenSearch Service, these are typical for Firehose data ingestion
-          "es:ESHttpHead", // May be needed for some versions
-          "es:Put*"      // Broad, but often used. Consider more granular if possible.
-        ],
-        Resource = ["${aws_opensearch_domain.siem_domain.arn}/*", aws_opensearch_domain.siem_domain.arn] // Access to the domain and its sub-resources (indices)
-      },
-      {
-         // Allow Firehose to write to S3 backup bucket
-        Effect = "Allow",
-        Action = [
-          "s3:AbortMultipartUpload",
-          "s3:GetBucketLocation",
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:ListBucketMultipartUploads",
-          "s3:PutObject"
-        ],
-        Resource = [
-          aws_s3_bucket.firehose_backup_bucket.arn,
-          "${aws_s3_bucket.firehose_backup_bucket.arn}/*" // Access to objects within the bucket
-        ]
-      },
-      {
-        # Allow Firehose to write to CloudWatch Logs for its own logging
-        Effect   = "Allow",
-        Action   = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ],
-        Resource = "arn:aws:logs:*:*:log-group:/aws/kinesisfirehose/${local.firehose_delivery_stream_name}:*"
-      }
+      // ... statements for Kinesis Stream read, old Lambda invoke, OpenSearch write, S3 write ...
     ]
   })
   tags = local.common_tags
@@ -135,7 +103,13 @@ resource "aws_iam_role_policy_attachment" "firehose_delivery_attachment" {
   role       = aws_iam_role.firehose_delivery_role.name
   policy_arn = aws_iam_policy.firehose_delivery_policy.arn
 }
+*/
 
-# Note: The OpenSearch domain policy (resource-based) will also grant Firehose write access.
-# This IAM role policy grants Firehose the *ability* to make those calls.
+# Note: The original lambda_transformer_role and its logging policy might still be relevant
+# if the transformation logic is complex and kept in a separate Lambda invoked by the MSK consumer.
+# For this refactor, we are assuming the MSK consumer Lambda handles transformation directly.
+# If that's not the case, uncomment and adjust as needed.
+# The old "lambda_transformer_role" and "lambda_logging_policy" are implicitly removed if
+# local.lambda_role_name is no longer defined or used.
+# Ensure local variables for old resources are removed from main.tf if they are fully deprecated.
 ```

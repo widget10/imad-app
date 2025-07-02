@@ -41,48 +41,53 @@ resource "aws_opensearch_domain" "siem_domain" {
     }
   }
 
-  # For PoC, keeping it simple by not using VPC. For production, VPC is highly recommended.
-  # vpc_options {
-  #   subnet_ids         = ["subnet-xxxxxxxxxxxxxxxxx"]
-  #   security_group_ids = ["sg-yyyyyyyyyyyyyyyyy"]
-  # }
+  # Deploy OpenSearch within the VPC for enhanced security
+  vpc_options {
+    subnet_ids         = [aws_subnet.private_subnet_az1.id, aws_subnet.private_subnet_az2.id]
+    security_group_ids = [aws_security_group.opensearch_sg.id]
+  }
 
-  # Access policy: Allows access from specified IPs and the Kinesis Firehose role
-  # This policy is crucial for Firehose to write data and for users to access Dashboards.
+  # Access policy: Allows access for FGAC master user (if defined) and the Lambda MSK consumer role.
+  # If dashboard_access_ip_ranges is set, it allows access from those IPs.
   access_policies = jsonencode({
     Version   = "2012-10-17",
     Statement = [
       {
+        # Allows all actions from within the VPC or specific IPs if configured,
+        # relying on Fine-Grained Access Control (FGAC) for actual user/role permissions.
         Effect    = "Allow",
-        Principal = {
-          AWS = "*" # Allows FGAC to handle auth. Or specify specific IAM users/roles.
-        },
-        Action    = "es:*", # Or "aoss:*" for serverless. Use more granular permissions in production.
-        Resource  = "${aws_opensearch_domain.siem_domain.arn}/*"
-        # Condition to restrict by IP for dashboard access
-        # Condition = {
-        #   IpAddress = {
-        #     "aws:SourceIp" = var.dashboard_access_ip_ranges
-        #   }
-        # }
+        Principal = { AWS = "*" }, # Or specify specific IAM roles/users if not using open access + FGAC
+        Action    = "es:*",    # Or more granular permissions
+        Resource  = "${aws_opensearch_domain.siem_domain.arn}/*",
+        Condition = {
+          # This condition ensures that if dashboard_access_ip_ranges is empty (recommended for VPC-only access),
+          # then this part of the policy effectively only applies if accessed via VPC endpoint.
+          # If dashboard_access_ip_ranges is populated, it allows from those IPs.
+          # For purely VPC internal access, this IP condition might be further restricted or combined with VPC endpoint conditions.
+          # For now, if dashboard_access_ip_ranges is empty, this condition won't match for external IPs, implicitly restricting.
+          # A more robust VPC-only setup might use `aws:SourceVpc`.
+          "ForAnyValue:IpAddressIfExists" = {
+            "aws:SourceIp" = var.dashboard_access_ip_ranges
+          }
+        } if length(var.dashboard_access_ip_ranges) > 0 # Apply condition only if IPs are specified
       },
-      # Statement to allow Kinesis Firehose to write to the domain
+      # Statement to allow the Lambda MSK consumer to write to the domain
       {
         Effect = "Allow",
         Principal = {
-          AWS = aws_iam_role.firehose_delivery_role.arn
+          AWS = aws_iam_role.lambda_msk_consumer_role.arn
         },
         Action = [
-            "es:ESHttpHead",
-            "es:ESHttpPost",
-            "es:ESHttpPut",
-            "es:DescribeDomain",
-            "es:DescribeDomains",
-            "es:DescribeDomainConfig"
-            // Add other "es:*" or "aoss:*" permissions as needed by Firehose
+          "es:ESHttpHead", # Often used by clients to check domain status
+          "es:ESHttpPost", # For bulk API, sending data
+          "es:ESHttpPut"   # For creating/updating templates, documents
         ],
-        Resource = "${aws_opensearch_domain.siem_domain.arn}/*"
+        Resource = "${aws_opensearch_domain.siem_domain.arn}/*" # Access to the domain and its sub-resources (indices)
       }
+      # Add a statement for the master user if defined by Terraform, allowing it full access
+      # This is often handled by FGAC internal users, but an explicit policy can be a fallback/bootstrap.
+      # Note: If opensearch_master_user_name is null, this statement should ideally be omitted.
+      # However, conditional statements in JSON policies are tricky. FGAC is primary for user access.
     ]
   })
 

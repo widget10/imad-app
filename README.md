@@ -256,4 +256,55 @@ Follow the instructions in `dashboard_configuration.md` to create visualizations
 *   `opensearch_index_template.json`: JSON for OpenSearch index template.
 *   `sample_opensearch_query.json`: JSON for a sample OpenSearch query for login failures.
 *   `dashboard_configuration.md`: Markdown describing the OpenSearch Dashboard setup.
+*   `run_app.sh`: Script to orchestrate the entire PoC setup and log generation flow.
+*   `terraform/`: Directory containing Terraform scripts for infrastructure deployment.
+    *   `terraform/run.sh`: Helper script to manage Terraform deployment.
+
+## End-to-End Automation with `run_app.sh`
+
+For a streamlined experience, the `run_app.sh` script in the project root attempts to automate the entire process from infrastructure deployment to initiating log generation.
+
+### Prerequisites for `run_app.sh`
+
+*   All prerequisites listed in `terraform/README.md` (Terraform CLI, AWS CLI configured).
+*   Python 3.x (for `sample_log_generator.py`).
+*   **Boto3 Python library**: If you want `sample_log_generator.py` to automatically send logs to Kinesis. Install it using:
+    ```bash
+    pip install boto3
+    ```
+    If Boto3 is not installed, the generator will print logs to the console, and `run_app.sh` will provide instructions for manual piping.
+
+### Using `run_app.sh`
+
+1.  **Navigate to the project root directory** (the directory containing `run_app.sh` and the `terraform/` subdirectory).
+2.  **Ensure `run_app.sh` is executable:**
+    ```bash
+    chmod +x run_app.sh
+    ```
+3.  **Configure Terraform Environment:**
+    *   Go into the `terraform/` directory.
+    *   Copy `terraform/.env.example` to `terraform/.env`.
+    *   Edit `terraform/.env` with your specific AWS region, project name, and any OpenSearch master user credentials if desired.
+    *   Return to the project root directory. The `run_app.sh` script expects to be run from here.
+
+### To Deploy Infrastructure and Generate Initial Logs:
+
+```bash
+./run_app.sh
+```
+This script will:
+1.  Perform pre-flight checks (Python, AWS CLI, required files).
+2.  Execute `terraform/run.sh` to deploy the AWS infrastructure (this includes `terraform init`, `plan`, and prompting for `apply`).
+3.  Retrieve the Kinesis Data Stream name and OpenSearch Dashboard URL from Terraform outputs.
+4.  Run `sample_log_generator.py`, attempting to send logs directly to the Kinesis stream if Boto3 is available.
+5.  Remind you of manual post-deployment steps (OpenSearch index template, dashboard setup).
+
+### To Destroy Infrastructure:
+
+```bash
+./run_app.sh destroy
+```
+This will navigate to the `terraform/` directory and execute `terraform/run.sh destroy`, which then runs `terraform destroy`.
+
+**Note:** Always review the output of the scripts carefully, especially the Terraform plan, before confirming actions that create or destroy resources.
 ```
